@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# Check if directory is a repo
+git -C . rev-parse 2>/dev/null
+exit_code=$(echo $?)
+if [ "$exit_code" -ne 0 ] ; then
+	echo "$(pwd) is not a git repository"
+	exit 0
+fi
+
+if [ -z "$1" ]
+then
+	echo "Please provide a commit message:"
+	echo "git cs \"commit message here\""
+	exit 0
+fi
+
+commit_message=$1
+
+MY_YESNO_PROMPT='[Y/n] $ '
+current_repo=$(basename `git rev-parse --show-toplevel`)
+current_repo_path=$(git rev-parse --show-toplevel)
+
+# Check if there are changed files
+changed_files=$(git status --porcelain --untracked-files=no | wc -l)
+if [[ $changed_files -gt 0 ]]
+then
+	echo "$changed_files are going to be committed"
+	git add .
+	git status
+else
+	echo "Nothing to commit"
+	exit 0
+fi
+
+# Check if on detached head or not
+if [[ $(git rev-parse --symbolic-full-name HEAD) == "HEAD" ]];
+then
+	git rev-parse --show-toplevel
+	echo "You are in a detached head, please switch branches first"
+	# TODO: ask to change to specific branch
+	exit 0
+else
+	# Commit changes
+	echo "Current repo: $current_repo"
+	echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+	echo "Commit message: $commit_message"
+	
+	echo "Ready to commit?"
+	echo -n "$MY_YESNO_PROMPT"
+	read confirm
+	if ( [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "yes" ] || [ "$confirm" = "Yes" ] || [ "$confirm" = "" ] )
+	then
+		git commit -m "$commit_message"
+		git push
+	else
+		exit 0
+	fi
+fi
+
+# Go up a directory
+cd ..
+
+# Check if there are any parent directories
+exit_code=0
+while [ "$exit_code" == 0 ]
+do
+	# Check if directory is a repo
+	git -C . rev-parse 2>/dev/null
+	exit_code=$(echo $?)
+	if [ "$exit_code" -ne 0 ] ; then
+		echo "$(pwd) is not a git repository"
+		exit 0
+	else
+		# Check if on detached HEAD
+		if [[ $(git rev-parse --symbolic-full-name HEAD) == "HEAD" ]];
+		then
+			git rev-parse --show-toplevel
+			echo "You are in a detached head, please switch branches first"
+
+			# TODO: ask to change to specific branch
+			exit 0
+		fi
+
+		commit_message="$current_repo: $commit_message"
+
+		echo "Adding $current_repo_path to stash"
+
+		git add $current_repo_path
+		current_repo=$(basename `git rev-parse --show-toplevel`)
+		current_repo_path=$(git rev-parse --show-toplevel)
+
+		cd $(git rev-parse --show-toplevel)
+		echo "Current repo: $current_repo"
+		echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+		echo "Commit message: $commit_message"
+
+		echo "Ready to commit?"
+		echo -n "$MY_YESNO_PROMPT"
+		read confirm
+		if ( [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "yes" ] || [ "$confirm" = "Yes" ] || [ "$confirm" = "" ] )
+		then
+			git commit -m "$commit_message"
+			git push
+		else
+			exit 0
+		fi
+	fi
+
+	cd ..
+done
